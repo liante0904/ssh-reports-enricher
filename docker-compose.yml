@@ -1,0 +1,26 @@
+services:
+  reports-enricher:
+    platform: linux/arm64
+    image: ${DOCKER_IMAGE_NAME:-ghcr.io/liante0904/ssh-reports-enricher}:${APP_ENV:-prod}
+    container_name: ssh-reports-enricher-${APP_ENV:-prod}
+    build:
+      context: .
+    restart: unless-stopped
+    network_mode: "host"
+    env_file:
+      - .env
+    volumes:
+      - ~/logs:/log
+    environment:
+      - APP_ENV=${APP_ENV:-prod}
+      - TZ=Asia/Seoul
+      - LOG_BASE_DIR=/log
+      - ENRICHER_INTERVAL_SECONDS=${ENRICHER_INTERVAL_SECONDS:-30}
+      - ENRICHER_BATCH_LIMIT=${ENRICHER_BATCH_LIMIT:-100}
+    stdin_open: true
+    tty: true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
