@@ -90,6 +90,9 @@ jobs:
             set -eu
 
             DEPLOY_DIR="${PROJECT_DIR:-/home/ubuntu/workspace/external.reports-hub/apps/scrapers/ssh-reports-enricher}"
+            if [ "$(basename "$DEPLOY_DIR")" = "external.reports-hub" ]; then
+              DEPLOY_DIR="$DEPLOY_DIR/apps/scrapers/ssh-reports-enricher"
+            fi
             FALLBACK_DIR="/home/ubuntu/workspace/external.reports-hub/apps/scrapers/ssh-reports-enricher"
 
             if [ -d "$DEPLOY_DIR" ]; then
