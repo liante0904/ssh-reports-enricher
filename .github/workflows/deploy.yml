@@ -89,16 +89,18 @@ jobs:
           script: |
             set -eu
 
-            DEPLOY_DIR="/home/ubuntu/workspace/external.reports-hub/apps/scrapers/ssh-reports-enricher"
+            DEPLOY_DIR="${PROJECT_DIR:-/home/ubuntu/workspace/external.reports-hub/apps/scrapers/ssh-reports-enricher}"
             FALLBACK_DIR="/home/ubuntu/workspace/external.reports-hub/apps/scrapers/ssh-reports-enricher"
 
-            if [ ! -d "$DEPLOY_DIR/.git" ] || [ ! -f "$DEPLOY_DIR/docker-compose.yml" ]; then
-              if [ "$DEPLOY_DIR" != "$FALLBACK_DIR" ] && [ -d "$FALLBACK_DIR/.git" ] && [ -f "$FALLBACK_DIR/docker-compose.yml" ]; then
-                echo "PROJECT_DIR is not a deployable repo; using $FALLBACK_DIR"
-                DEPLOY_DIR="$FALLBACK_DIR"
-              else
-                echo "Deploy directory is invalid: $DEPLOY_DIR"
-                exit 1
+            if [ -d "$DEPLOY_DIR" ]; then
+              if [ ! -d "$DEPLOY_DIR/.git" ] || [ ! -f "$DEPLOY_DIR/docker-compose.yml" ]; then
+                if [ "$DEPLOY_DIR" != "$FALLBACK_DIR" ] && [ -d "$FALLBACK_DIR/.git" ] && [ -f "$FALLBACK_DIR/docker-compose.yml" ]; then
+                  echo "PROJECT_DIR is not a deployable repo; using $FALLBACK_DIR"
+                  DEPLOY_DIR="$FALLBACK_DIR"
+                else
+                  echo "Deploy directory is invalid: $DEPLOY_DIR"
+                  exit 1
+                fi
               fi
             fi
 
