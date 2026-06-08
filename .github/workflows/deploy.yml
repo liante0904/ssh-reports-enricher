@@ -89,11 +89,11 @@ jobs:
           script: |
             set -eu
 
-            DEPLOY_DIR="${PROJECT_DIR:-/home/ubuntu/workspace/external.reports-hub/apps/scrapers/ssh-reports-enricher}"
-            if [ "$(basename "$DEPLOY_DIR")" = "external.reports-hub" ]; then
+            DEPLOY_DIR="${PROJECT_DIR:-/home/ubuntu/workspace/internal.private-hub/apps/scrapers/ssh-reports-enricher}"
+            if [ "$(basename "$DEPLOY_DIR")" = "internal.private-hub" ]; then
               DEPLOY_DIR="$DEPLOY_DIR/apps/scrapers/ssh-reports-enricher"
             fi
-            FALLBACK_DIR="/home/ubuntu/workspace/external.reports-hub/apps/scrapers/ssh-reports-enricher"
+            FALLBACK_DIR="/home/ubuntu/workspace/internal.private-hub/apps/scrapers/ssh-reports-enricher"
 
             if [ -d "$DEPLOY_DIR" ]; then
               if [ ! -d "$DEPLOY_DIR/.git" ] || [ ! -f "$DEPLOY_DIR/docker-compose.yml" ]; then
