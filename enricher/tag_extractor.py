@@ -577,18 +577,24 @@ TAG_PATTERNS = [
 
     (r"목표(?:주)?가\s*(?:상향|上调|인상|상승)", "목표주가 상향"),
     (r"목표(?:주)?가\s*(?:하향|下调|인하|하락)", "목표주가 하향"),
+    (r"목표(?:주)?가\s*(?:유지|不变)", "목표주가 유지"),
     (r"적정(?:주)?가\s*(?:상향|上调|인상)", "목표주가 상향"),
     (r"적정(?:주)?가\s*(?:하향|下调|인하)", "목표주가 하향"),
+    (r"적정(?:주)?가\s*(?:유지|不变)", "목표주가 유지"),
     (r"투자의견\s*(?:상향|上调)", "투자의견 상향"),
     (r"투자의견\s*(?:하향|下调)", "투자의견 하향"),
+    (r"투자의견\s*(?:유지|不变)", "투자의견 유지"),
     (r"(?:신규\s*)?커버리지\s*(?:개시|시작)?", "신규 커버리지"),
     (r"Coverage\s*(?:Initiation|initiation)", "신규 커버리지"),
-    (r"실적\s*(?:리뷰|Review|분석|Preview|전망|Preview)", "실적 분석"),
+    (r"실적\s*(?:리뷰|Review|분석|Preview|전망)", "실적 분석"),
     (r"Preview|preview", "실적 전망"),
     (r"Review|review", "실적 리뷰"),
     (r"밸류에이션|Valuation|valuation", "밸류에이션"),
     (r"배당|Dividend|dividend", "배당"),
     (r"M&A|인수\s*합병|인수합병", "M&A"),
+    (r"블록딜|Block\s*Deal|block\s*deal", "블록딜"),
+    (r"경영권\s*분쟁|경영권분쟁", "경영권 분쟁"),
+    (r"메자닌|Mezzanine|CB|BW|전환사채|신주인수권부사채", "메자닌"),
     (r"신제품\s*(?:출시|발표|런칭)", "신제품 출시"),
     (r"환율|Exchange\s*Rate|원달러|원/달러|달러/원", "환율"),
     (r"금리\s*(?:인상|인하|동결|결정)", "금리"),
@@ -761,12 +767,32 @@ class TagExtractionManager:
         # 중복 제거 & 순서 유지
         tags = list(dict.fromkeys(tags))
 
-        # sector와 stock_names에 겹치는 단어는 tags에서 제외 (중복 배지 노출 방지)
-        if sector and sector in tags:
-            tags.remove(sector)
-        for stock in stock_names:
-            if stock in tags:
-                tags.remove(stock)
+        # sector와 stock_names에 겹치거나 부분 일치하는 단어는 tags에서 스마트하게 제외 (중복 배지 노출 방지)
+        cleaned_tags = []
+        for tag in tags:
+            # sector와 완전히 일치하거나 sector가 tag에 포함/포함되는 관계인 경우 제외
+            if sector and (tag == sector or (len(tag) >= 2 and (tag in sector or sector in tag))):
+                # 단, '반도체 신기술'과 같이 tag가 sector보다 더 긴 상세 주제는 남겨둠으로써 풍부한 정보 제공
+                if len(tag) > len(sector) and sector in tag:
+                    pass
+                else:
+                    continue
+            
+            # 종목명과 완전히 일치하거나 부분 일치하는 단어 제외 (ex: 종목명이 '삼성전자'일 때 태그 '삼성' 또는 '삼성전자' 드롭)
+            is_stock_overlap = False
+            for stock in stock_names:
+                if tag == stock:
+                    is_stock_overlap = True
+                    break
+                if len(tag) >= 2 and (tag in stock or stock in tag):
+                    is_stock_overlap = True
+                    break
+            
+            if is_stock_overlap:
+                continue
+                
+            cleaned_tags.append(tag)
+        tags = cleaned_tags
 
         logger.debug(
             f"[RuleBased] report_id={report_id}: "
@@ -801,14 +827,32 @@ class TagExtractionManager:
         if action_type and action_type not in tags:
             tags.insert(0, action_type)
 
+        # 중복 제거 & 순서 유지
         tags = list(dict.fromkeys(tags))
 
-        # sector와 stock_names에 겹치는 단어는 tags에서 제외 (중복 배지 노출 방지)
-        if sector and sector in tags:
-            tags.remove(sector)
-        for stock in stock_names:
-            if stock in tags:
-                tags.remove(stock)
+        # sector와 stock_names에 겹치거나 부분 일치하는 단어는 tags에서 스마트하게 제외 (중복 배지 노출 방지)
+        cleaned_tags = []
+        for tag in tags:
+            if sector and (tag == sector or (len(tag) >= 2 and (tag in sector or sector in tag))):
+                if len(tag) > len(sector) and sector in tag:
+                    pass
+                else:
+                    continue
+            
+            is_stock_overlap = False
+            for stock in stock_names:
+                if tag == stock:
+                    is_stock_overlap = True
+                    break
+                if len(tag) >= 2 and (tag in stock or stock in tag):
+                    is_stock_overlap = True
+                    break
+            
+            if is_stock_overlap:
+                continue
+                
+            cleaned_tags.append(tag)
+        tags = cleaned_tags
 
         return {
             "tags": tags[:8],

@@ -12,6 +12,7 @@ Premium Parser - 프리미엄 금융 데이터 고도화 가공 코어 모듈
 
 import re
 from typing import Any, Optional
+from enricher.tag_extractor import KNOWN_STOCKS
 
 # ═══════════════════════════════════════════════════════════════════════
 # 1. 정적 자원 및 정규식 컴파일 정의
@@ -33,6 +34,11 @@ STOCK_CODE_MAP: dict[str, str] = {
     "LG에너지솔루션": "373220",
     "삼성바이오로직스": "207940"
 }
+
+# tag_extractor.py에 정밀 분석 적재되어 있는 KNOWN_STOCKS를 동적으로 융합
+for _k, _v in KNOWN_STOCKS.items():
+    if _k not in STOCK_CODE_MAP:
+        STOCK_CODE_MAP[_k] = _v
 
 # 목표주가 및 상향/하향 액션 포착 정규식
 # 예: "목표가 110,000원으로 상향", "목표주가 90000원 하향", "목표가 12만원 유지"
@@ -79,9 +85,26 @@ class PremiumReportParser:
             tickers.extend(direct_tickers)
 
         # 2. 기존 추출 종목명 또는 제목에 사명 키워드가 매칭되는 경우 매핑 사전 조회
-        for name, code in STOCK_CODE_MAP.items():
+        # 사명 이름이 긴 것부터 탐색하여 짧은 사명의 부분 매치 오추출 방지 (ex: 'SK하이닉스'에 'SK'가 겹치지 않게)
+        sorted_names = sorted(STOCK_CODE_MAP.keys(), key=len, reverse=True)
+        matched_intervals = []
+
+        for name in sorted_names:
+            code = STOCK_CODE_MAP[name]
+            
             if name in title:
-                tickers.append(code)
+                # 겹치는 구간 확인을 위해 모든 출현 위치 탐색
+                for m in re.finditer(re.escape(name), title):
+                    start_idx, end_idx = m.span()
+                    overlap = False
+                    for s, e in matched_intervals:
+                        if start_idx < e and end_idx > s:
+                            overlap = True
+                            break
+                    if not overlap:
+                        tickers.append(code)
+                        matched_intervals.append((start_idx, end_idx))
+                        break  # 이 사명에 대해 첫 번째 유효 구간 확보 시 루프 탈출
             elif existing_stocks and name in existing_stocks:
                 tickers.append(code)
 

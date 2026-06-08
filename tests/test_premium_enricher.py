@@ -37,6 +37,10 @@ def test_extract_tickers():
     title_c = "삼성전자와 SK하이닉스 반도체 전면 비교 분석"
     assert parser.extract_tickers(title_c) == ["000660", "005930"]
 
+    # 케이스 D: 부분 글자 오버랩 예방 가드 검증 (SK하이닉스 매칭 시 짧은 SK(034730)는 배제되어야 함)
+    title_d = "SK하이닉스 실적 최고치 경신 전망"
+    assert parser.extract_tickers(title_d) == ["000660"]
+
 
 def test_parse_target_price_and_rating():
     """목표주가 정수 변환, 변동 방향(Action) 및 투자의견(Rating) 추출 검증"""
