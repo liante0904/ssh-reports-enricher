@@ -586,19 +586,23 @@ class EnricherManager:
             )
 
     def _update_tags(self, conn, report_id: int, tags: list, stock_names: list, sector: str):
-        """기존 4개 인자만 넘기는 오리지널 스키마용 하위 호환 메서드"""
-        self._update_tags_and_premium(
-            conn,
-            report_id,
-            tags,
-            stock_names,
-            sector,
-            target_price=None,
-            rating=None,
-            revision_type=None,
-            report_type=None,
-            stock_tickers=None,
-        )
+        """기존 3개 인자(tags, stock_names, sector)만 넘기는 오리지널 스키마용 하위 호환 메서드"""
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                UPDATE {self.MAIN_TABLE}
+                SET tags = %s,
+                    stock_names = %s,
+                    sector = %s
+                WHERE report_id = %s
+                """,
+                (
+                    json.dumps(tags, ensure_ascii=False),
+                    json.dumps(stock_names, ensure_ascii=False),
+                    sector or "",
+                    report_id,
+                ),
+            )
 
     def _update_premium_only(
         self,
