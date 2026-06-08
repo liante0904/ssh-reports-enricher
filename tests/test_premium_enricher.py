@@ -15,7 +15,10 @@ from typing import Generator
 # 프로젝트 루트를 파이썬 모듈 검색 경로에 명시적으로 추가
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import asyncio
 from enricher.premium_parser import PremiumReportParser
+from enricher.tag_extractor import TagExtractionManager
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # 1. 단위 테스트 (Unit Tests)
@@ -252,3 +255,34 @@ def test_premium_pipeline_database_integration(mock_db):
     assert f_year == 2026
     assert f_sales == 50
     assert f_op == 8
+
+
+def test_tag_extractor_new_rules_and_smart_dedup():
+    """TagExtractionManager의 신규 유지 관련 태그, 메자닌/블록딜 규칙 및 스마트 중복 제거 로직 검증"""
+    manager = TagExtractionManager()
+
+    async def run_test():
+        # 1. 신규 태그 규칙 매칭 검증
+        res_maintain_tp = await manager.extract_tags("삼성전자 목표가 유지 의견 제시")
+        assert "목표주가 유지" in res_maintain_tp["tags"]
+
+        res_maintain_opinion = await manager.extract_tags("카카오 투자의견 유지와 밸류에이션 분석")
+        assert "투자의견 유지" in res_maintain_opinion["tags"]
+
+        res_finance_rules = await manager.extract_tags("두산에너빌리티 5000억 블록딜 단행과 전환사채 및 신주인수권부사채 발행")
+        assert "블록딜" in res_finance_rules["tags"]
+        assert "메자닌" in res_finance_rules["tags"]
+
+        res_management_conflict = await manager.extract_tags("고려아연 경영권 분쟁 소식에 상한가 기록")
+        assert "경영권 분쟁" in res_management_conflict["tags"]
+
+        # 2. 스마트 중복 제거 (Dedup) 및 가드 검증
+        res_dedup = await manager.extract_tags("SK하이닉스(000660): 반도체 업황 개선 및 반도체 신기술 발표")
+        
+        assert "반도체" not in res_dedup["tags"]
+        assert "SK하이닉스" not in res_dedup["tags"]
+        assert "반도체 신기술" in res_dedup["tags"]
+
+    asyncio.run(run_test())
+
+
