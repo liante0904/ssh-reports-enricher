@@ -24,6 +24,7 @@ import psycopg2.extras
 from dotenv import load_dotenv
 
 from enricher.tag_extractor import TagExtractionManager
+from enricher.premium_parser import PremiumReportParser
 
 logger = logging.getLogger("enricher")
 
@@ -59,6 +60,7 @@ class EnricherManager:
             self.password = os.getenv("POSTGRES_PASSWORD", "")
 
         self.extractor = TagExtractionManager()
+        self.premium_parser = PremiumReportParser()
 
     # ── Connection ──────────────────────────────────────────────────
 
@@ -120,29 +122,69 @@ class EnricherManager:
                     )
 
                     if result.get("status") == "success":
+                        title = row["article_title"]
+                        stock_names = result.get("stock_names", [])
+
+                        opinion = self.premium_parser.parse_target_price_and_rating(title)
+                        tickers = self.premium_parser.extract_tickers(title, existing_stocks=stock_names)
+                        rep_type = self.premium_parser.classify_report_type(title, tickers)
+
                         if self._db is not None and hasattr(self._db, 'update_report_tags'):
                             # scraper의 PostgreSQLManager 사용 (이미 async)
                             conn.close()
                             conn = None
-                            # 비동기 메서드를 동기적으로 호출
                             inner_loop = asyncio.new_event_loop()
-                            inner_loop.run_until_complete(
-                                self._db.update_report_tags(
-                                    row["report_id"],
-                                    result["tags"],
-                                    result["stock_names"],
-                                    result["sector"],
+                            try:
+                                # 프리미엄 파라미터 전달 시도
+                                inner_loop.run_until_complete(
+                                    self._db.update_report_tags(
+                                        row["report_id"],
+                                        result["tags"],
+                                        result["stock_names"],
+                                        result["sector"],
+                                        target_price=opinion["target_price"],
+                                        rating=opinion["rating"],
+                                        revision_type=opinion["revision_type"],
+                                        report_type=rep_type,
+                                        stock_tickers=tickers,
+                                    )
                                 )
-                            )
-                            inner_loop.close()
-                            conn = self._get_conn()
+                            except TypeError:
+                                # 프리미엄 파라미터를 지원하지 않을 때 (기존 4개 파라미터 전송 후 별도 추가 업데이트)
+                                inner_loop.run_until_complete(
+                                    self._db.update_report_tags(
+                                        row["report_id"],
+                                        result["tags"],
+                                        result["stock_names"],
+                                        result["sector"],
+                                    )
+                                )
+                                conn = self._get_conn()
+                                self._update_premium_only(
+                                    conn,
+                                    row["report_id"],
+                                    target_price=opinion["target_price"],
+                                    rating=opinion["rating"],
+                                    revision_type=opinion["revision_type"],
+                                    report_type=rep_type,
+                                    stock_tickers=tickers,
+                                )
+                            finally:
+                                inner_loop.close()
+                                if conn is None:
+                                    conn = self._get_conn()
                         else:
-                            self._update_tags(
+                            self._update_tags_and_premium(
                                 conn,
                                 row["report_id"],
                                 result["tags"],
                                 result["stock_names"],
                                 result["sector"],
+                                target_price=opinion["target_price"],
+                                rating=opinion["rating"],
+                                revision_type=opinion["revision_type"],
+                                report_type=rep_type,
+                                stock_tickers=tickers,
                             )
                         stats["enriched"] += 1
                     else:
@@ -222,24 +264,66 @@ class EnricherManager:
                         )
                     )
                     if result.get("status") == "success":
+                        title = row["article_title"]
+                        stock_names = result.get("stock_names", [])
+
+                        opinion = self.premium_parser.parse_target_price_and_rating(title)
+                        tickers = self.premium_parser.extract_tickers(title, existing_stocks=stock_names)
+                        rep_type = self.premium_parser.classify_report_type(title, tickers)
+
                         if self._db is not None and hasattr(self._db, 'update_report_tags'):
+                            conn.close()
+                            conn = None
                             inner_loop = asyncio.new_event_loop()
-                            inner_loop.run_until_complete(
-                                self._db.update_report_tags(
-                                    row["report_id"],
-                                    result["tags"],
-                                    result["stock_names"],
-                                    result["sector"],
+                            try:
+                                inner_loop.run_until_complete(
+                                    self._db.update_report_tags(
+                                        row["report_id"],
+                                        result["tags"],
+                                        result["stock_names"],
+                                        result["sector"],
+                                        target_price=opinion["target_price"],
+                                        rating=opinion["rating"],
+                                        revision_type=opinion["revision_type"],
+                                        report_type=rep_type,
+                                        stock_tickers=tickers,
+                                    )
                                 )
-                            )
-                            inner_loop.close()
+                            except TypeError:
+                                inner_loop.run_until_complete(
+                                    self._db.update_report_tags(
+                                        row["report_id"],
+                                        result["tags"],
+                                        result["stock_names"],
+                                        result["sector"],
+                                    )
+                                )
+                                conn = self._get_conn()
+                                self._update_premium_only(
+                                    conn,
+                                    row["report_id"],
+                                    target_price=opinion["target_price"],
+                                    rating=opinion["rating"],
+                                    revision_type=opinion["revision_type"],
+                                    report_type=rep_type,
+                                    stock_tickers=tickers,
+                                )
+                            finally:
+                                inner_loop.close()
+                                if conn is None:
+                                    conn = self._get_conn()
                         else:
-                            self._update_tags(
+                            self._update_tags_and_premium(
                                 conn,
                                 row["report_id"],
                                 result["tags"],
                                 result["stock_names"],
                                 result["sector"],
+                                target_price=opinion["target_price"],
+                                rating=opinion["rating"],
+                                revision_type=opinion["revision_type"],
+                                report_type=rep_type,
+                                stock_tickers=tickers,
                             )
                         stats["enriched"] += 1
                     else:
@@ -281,15 +365,62 @@ class EnricherManager:
                 report_id=report_id,
             )
             if result.get("status") == "success":
+                title = row["article_title"]
+                stock_names = result.get("stock_names", [])
+
+                opinion = self.premium_parser.parse_target_price_and_rating(title)
+                tickers = self.premium_parser.extract_tickers(title, existing_stocks=stock_names)
+                rep_type = self.premium_parser.classify_report_type(title, tickers)
+
+                # 단일 조회 API 응답 데이터도 프리미엄 사양으로 격상
+                result["target_price"] = opinion["target_price"]
+                result["rating"] = opinion["rating"]
+                result["revision_type"] = opinion["revision_type"]
+                result["report_type"] = rep_type
+                result["stock_tickers"] = tickers
+
                 if self._db is not None and hasattr(self._db, 'update_report_tags'):
-                    await self._db.update_report_tags(
+                    try:
+                        await self._db.update_report_tags(
+                            report_id,
+                            result["tags"],
+                            result["stock_names"],
+                            result["sector"],
+                            target_price=opinion["target_price"],
+                            rating=opinion["rating"],
+                            revision_type=opinion["revision_type"],
+                            report_type=rep_type,
+                            stock_tickers=tickers,
+                        )
+                    except TypeError:
+                        await self._db.update_report_tags(
+                            report_id,
+                            result["tags"],
+                            result["stock_names"],
+                            result["sector"],
+                        )
+                        self._update_premium_only(
+                            conn,
+                            report_id,
+                            target_price=opinion["target_price"],
+                            rating=opinion["rating"],
+                            revision_type=opinion["revision_type"],
+                            report_type=rep_type,
+                            stock_tickers=tickers,
+                        )
+                else:
+                    self._update_tags_and_premium(
+                        conn,
                         report_id,
                         result["tags"],
                         result["stock_names"],
                         result["sector"],
+                        target_price=opinion["target_price"],
+                        rating=opinion["rating"],
+                        revision_type=opinion["revision_type"],
+                        report_type=rep_type,
+                        stock_tickers=tickers,
                     )
-                else:
-                    self._update_tags(conn, report_id, result["tags"], result["stock_names"], result["sector"])
                     conn.commit()
             return result
         except Exception as e:
@@ -300,18 +431,90 @@ class EnricherManager:
 
     # ── 내부 유틸리티 ────────────────────────────────────────────────
 
-    def _update_tags(self, conn, report_id: int, tags: list, stock_names: list, sector: str):
+    def _update_tags_and_premium(
+        self,
+        conn,
+        report_id: int,
+        tags: list,
+        stock_names: list,
+        sector: str,
+        target_price: Optional[int] = None,
+        rating: Optional[str] = None,
+        revision_type: Optional[str] = None,
+        report_type: Optional[str] = None,
+        stock_tickers: Optional[list] = None,
+    ):
+        """태그 정보와 프리미엄 추출 메트릭을 데이터베이스에 일괄 업데이트합니다."""
         with conn.cursor() as cur:
             cur.execute(
                 f"""
                 UPDATE {self.MAIN_TABLE}
-                SET tags = %s, stock_names = %s, sector = %s
+                SET tags = %s,
+                    stock_names = %s,
+                    sector = %s,
+                    target_price = %s,
+                    rating = %s,
+                    revision_type = %s,
+                    report_type = %s,
+                    stock_tickers = %s
                 WHERE report_id = %s
                 """,
                 (
                     json.dumps(tags, ensure_ascii=False),
                     json.dumps(stock_names, ensure_ascii=False),
                     sector or "",
+                    target_price,
+                    rating,
+                    revision_type,
+                    report_type,
+                    json.dumps(stock_tickers or [], ensure_ascii=False),
+                    report_id,
+                ),
+            )
+
+    def _update_tags(self, conn, report_id: int, tags: list, stock_names: list, sector: str):
+        """기존 4개 인자만 넘기는 오리지널 스키마용 하위 호환 메서드"""
+        self._update_tags_and_premium(
+            conn,
+            report_id,
+            tags,
+            stock_names,
+            sector,
+            target_price=None,
+            rating=None,
+            revision_type=None,
+            report_type=None,
+            stock_tickers=None,
+        )
+
+    def _update_premium_only(
+        self,
+        conn,
+        report_id: int,
+        target_price: Optional[int] = None,
+        rating: Optional[str] = None,
+        revision_type: Optional[str] = None,
+        report_type: Optional[str] = None,
+        stock_tickers: Optional[list] = None,
+    ):
+        """기존 태그 정보 외에 프리미엄 필드만 선별적으로 업데이트합니다 (Fallback 용)."""
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                UPDATE {self.MAIN_TABLE}
+                SET target_price = %s,
+                    rating = %s,
+                    revision_type = %s,
+                    report_type = %s,
+                    stock_tickers = %s
+                WHERE report_id = %s
+                """,
+                (
+                    target_price,
+                    rating,
+                    revision_type,
+                    report_type,
+                    json.dumps(stock_tickers or [], ensure_ascii=False),
                     report_id,
                 ),
             )
