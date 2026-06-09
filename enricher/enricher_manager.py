@@ -15,21 +15,20 @@ PostgreSQL에 직접 연결하여:
 
 import json
 import logging
-import os
 from datetime import datetime
 from typing import Optional
 
 import psycopg2
 import psycopg2.extras
-from dotenv import load_dotenv
 
+from ssh_library.database import BasePostgreSQLManager
 from enricher.tag_extractor import TagExtractionManager
 from enricher.premium_parser import PremiumReportParser
 
 logger = logging.getLogger("enricher")
 
 
-class EnricherManager:
+class EnricherManager(BasePostgreSQLManager):
     """PostgreSQL 연결 + TagExtractionManager를 통합한 enricher 서비스"""
 
     MAIN_TABLE = "tbl_sec_reports"
@@ -40,24 +39,15 @@ class EnricherManager:
             db_manager: 선택적 PostgreSQLManager 인스턴스.
                         제공되면 해당 인스턴스의 연결 설정을 재사용하고,
                         DB 업데이트 시 update_report_tags()를 우선 사용합니다.
-                        None이면 .env 기반 자체 연결을 생성합니다.
         """
-        self._db = db_manager  # optional PostgreSQLManager from scraper
+        super().__init__()
+        self._db = db_manager
 
         if db_manager is not None:
-            # scraper의 PostgreSQLManager에서 연결 정보를 읽어옴
-            self.host = getattr(db_manager, 'host', 'localhost')
-            self.port = getattr(db_manager, 'port', '5432')
-            self.database = getattr(db_manager, 'database', 'ssh_reports_hub')
-            self.user = getattr(db_manager, 'user', 'ssh_reports_hub')
+            self.host = getattr(db_manager, 'host', self.host)
+            self.port = getattr(db_manager, 'port', self.port)
+            self.database = getattr(db_manager, 'database', self.database)
             self.password = getattr(db_manager, 'password', '')
-        else:
-            load_dotenv(override=False)
-            self.host = os.getenv("POSTGRES_HOST", "localhost")
-            self.port = os.getenv("POSTGRES_PORT", "5432")
-            self.database = os.getenv("POSTGRES_REPORT_DB", "ssh_reports_hub")
-            self.user = os.getenv("POSTGRES_ENRICH_USER", os.getenv("POSTGRES_USER", "ssh_reports_hub"))
-            self.password = os.getenv("POSTGRES_PASSWORD", "")
 
         self.extractor = TagExtractionManager()
         self.premium_parser = PremiumReportParser()
