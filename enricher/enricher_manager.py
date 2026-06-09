@@ -666,5 +666,36 @@ class EnricherManager(BasePostgreSQLManager):
             logger.info(f"[Enricher] FnGuide 매칭: {stats['matched']}건")
         return stats
 
-    # TODO: 역매칭 (sec_reports.pdf_url → fnguide_report_summaries)
+    
     # article_url은 FnGuide 원장 URL이므로 새 컬럼 또는 JOIN으로 구현 필요
+
+    def backfill_fnguide_pdf_urls(self, batch_size: int = 500) -> dict:
+        """역매칭: sec_reports.telegram_url → fnguide_report_summaries.pdf_url"""
+        conn = self._get_conn()
+        stats = {"updated": 0, "errors": 0}
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    UPDATE tbl_fnguide_report_summaries s
+                    SET pdf_url = r.telegram_url
+                    FROM {self.MAIN_TABLE} r
+                    WHERE s.summary_id = r.fnguide_summary_id
+                      AND r.telegram_url IS NOT NULL AND r.telegram_url != ''
+                      AND (s.pdf_url IS NULL OR s.pdf_url = '')
+                      AND s.summary_id IN (
+                          SELECT summary_id FROM tbl_fnguide_report_summaries
+                          WHERE pdf_url IS NULL OR pdf_url = ''
+                          ORDER BY summary_id LIMIT {batch_size}
+                      )
+                """)
+                stats["updated"] = cur.rowcount
+                conn.commit()
+        except Exception as e:
+            logger.error(f"backfill_fnguide_pdf_urls: {e}")
+            conn.rollback()
+            stats["errors"] += 1
+        finally:
+            conn.close()
+        if stats["updated"] > 0:
+            logger.info(f"[Enricher] PDF URL 역매칭: {stats['updated']}건")
+        return stats
