@@ -645,7 +645,8 @@ class EnricherManager(BasePostgreSQLManager):
                     SET fnguide_summary_id = s.summary_id
                     FROM tbl_fnguide_report_summaries s
                     WHERE r.firm_nm = s.provider
-                      AND REPLACE(s.report_date, '.', '') = r.reg_dt
+                      AND s.author LIKE r.writer || '%%'
+                      AND REPLACE(s.report_date, '.', '')::integer - r.reg_dt::integer BETWEEN 0 AND 3
                       AND r.article_title LIKE '%%' || s.company_name || '%%'
                       AND r.fnguide_summary_id IS NULL
                       AND s.summary_id IN (
@@ -665,37 +666,5 @@ class EnricherManager(BasePostgreSQLManager):
             logger.info(f"[Enricher] FnGuide 매칭: {stats['matched']}건")
         return stats
 
-    def backfill_fnguide_pdf_urls(self, batch_size: int = 200) -> dict:
-        """역매칭: tbl_sec_reports의 pdf_url → tbl_fnguide_report_summaries.
-        
-        이미 매칭된 건에 대해 sec_reports 쪽 pdf_url을 summaries 쪽에 채웁니다.
-        """
-        conn = self._get_conn()
-        stats = {"updated": 0, "errors": 0}
-        try:
-            with conn.cursor() as cur:
-                cur.execute(f"""
-                    UPDATE tbl_fnguide_report_summaries s
-                    SET article_url = r.article_url
-                    FROM {self.MAIN_TABLE} r
-                    WHERE s.summary_id = r.fnguide_summary_id
-                      AND r.article_url IS NOT NULL
-                      AND r.article_url != ''
-                      AND s.article_url IS NULL
-                      AND s.summary_id IN (
-                          SELECT summary_id FROM tbl_fnguide_report_summaries
-                          WHERE article_url IS NULL
-                          ORDER BY summary_id LIMIT {batch_size}
-                      )
-                """)
-                stats["updated"] = cur.rowcount
-                conn.commit()
-        except Exception as e:
-            logger.error(f"backfill_fnguide_pdf_urls failed: {e}")
-            conn.rollback()
-            stats["errors"] += 1
-        finally:
-            conn.close()
-        if stats["updated"] > 0:
-            logger.info(f"[Enricher] FnGuide PDF URL 역매칭: {stats['updated']}건")
-        return stats
+    # TODO: 역매칭 (sec_reports.pdf_url → fnguide_report_summaries)
+    # article_url은 FnGuide 원장 URL이므로 새 컬럼 또는 JOIN으로 구현 필요
