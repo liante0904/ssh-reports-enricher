@@ -281,9 +281,12 @@ class EnricherManager(BasePostgreSQLManager):
                     f"""
                     SELECT report_id, firm_nm, article_title
                     FROM {self.MAIN_TABLE}
-                    WHERE (tags IS NULL OR tags = '[]'::jsonb OR tags = '[]')
+                    WHERE (tags IS NULL OR tags = '[]'::jsonb OR tags = '[]'
+                           OR jsonb_array_length(tags) <= 2)
                       AND article_title IS NOT NULL AND article_title != ''
-                    ORDER BY report_id DESC
+                    ORDER BY 
+                        CASE WHEN tags IS NULL OR tags = '[]'::jsonb OR tags = '[]' THEN 1 ELSE 2 END,
+                        report_id DESC
                     LIMIT %s
                     """,
                     (limit,),
