@@ -665,6 +665,31 @@ TAG_PATTERNS = [
     (r"환율|FX|외환", "외환"),
     (r"퀀트|Quant|팩터|Factor", "퀀트"),
     (r"기술적\s*분석|차트|Technical", "기술적 분석"),
+    # ── 2026-06-09 누락 패턴 보강 (태깅률 0.77% → 목표 50%+) ──────────
+    (r"Not\s*Rated|not\s*rated|N/R", "Not Rated"),
+    (r"\b\dQ\d{2}\b", "분기 실적"),
+    (r"\bFY\d{2}\b", "연간 전망"),
+    (r"데이터센터|Data\s*Center|data\s*center", "데이터센터"),
+    (r"리밸런싱|Rebalancing|rebalancing|비중\s*조절", "리밸런싱"),
+    (r"거버넌스|Governance|governance", "거버넌스"),
+    (r"디지털\s*자산|가상자산|Digital\s*Asset|Crypto|암호화폐|비트코인|Bitcoin|이더리움", "디지털자산"),
+    (r"사이드카|서킷\s*브레이커|서킷브레이커|Circuit\s*Breaker", "서킷브레이커"),
+    (r"리레이팅|Re-rating|rerating|재평가|리레이팅", "리레이팅"),
+    (r"히든밸류|Hidden\s*Value|숨은\s*가치|저평가|UnderValued|undervalued", "저평가/가치주"),
+    (r"고배당|High\s*Dividend|배당\s*King|배당킹", "고배당"),
+    (r"클로징|Closing|closing|마감", "시황"),
+    (r"반등|급반등|V자\s*반등|V자반등", "반등"),
+    (r"포트폴리오|Portfolio|portfolio", "포트폴리오"),
+    (r"리서치|Research|research|탐방", "기업 분석"),
+    (r"업데이트|Update|update", "업데이트"),
+    (r"공매도|Short\s*Selling|short\s*selling|숏커버", "공매도"),
+    (r"현금흐름|Cash\s*Flow|FCF|fcf", "현금흐름"),
+    (r"밸류\s*체인|Value\s*Chain|value\s*chain", "밸류체인"),
+    (r"\.[A-Z]{2,4}\)", "해외주식"),
+    # 실적 관련 보강 — 더 짧은 패턴은 위의 구체적 패턴 다음에 배치
+    (r"실적\s*(?:발표|시즌|공개|모멘텀)", "실적 분석"),
+    (r"영업\s*실적|영업실적|실적\s*추가|실적\s*개선", "실적 분석"),
+    (r"밸류", "밸류에이션"),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -700,8 +725,8 @@ RE_BRACKET_STOCK = re.compile(
     re.IGNORECASE,
 )
 
-# [산업명] 형태
-RE_BRACKET_SECTOR = re.compile(r"\[([가-힣A-Za-z]+)\]")
+# [산업명] 또는 [산업/하위] 형태 (ex: [철강/금속])
+RE_BRACKET_SECTOR = re.compile(r"\[([가-힣A-Za-z/]+)\]")
 
 # 종목명 : 설명 또는 종목명 - 설명 형태 (코드 없는 경우)
 RE_STOCK_NO_CODE = re.compile(
@@ -794,6 +819,10 @@ class TagExtractionManager:
             cleaned_tags.append(tag)
         tags = cleaned_tags
 
+        # 종목명 추출됐는데 실질적 태그가 없으면 "기업 분석" 기본 태그 부여
+        if stock_names and "기업 분석" not in tags:
+            tags.append("기업 분석")
+
         logger.debug(
             f"[RuleBased] report_id={report_id}: "
             f"tags={tags}, stocks={stock_names}, sector={sector}, action={action_type}"
@@ -853,6 +882,10 @@ class TagExtractionManager:
                 
             cleaned_tags.append(tag)
         tags = cleaned_tags
+
+        # 종목명 추출됐는데 실질적 태그가 없으면 "기업 분석" 기본 태그 부여
+        if stock_names and "기업 분석" not in tags:
+            tags.append("기업 분석")
 
         return {
             "tags": tags[:8],
