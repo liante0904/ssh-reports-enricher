@@ -628,3 +628,74 @@ class EnricherManager(BasePostgreSQLManager):
                     report_id,
                 ),
             )
+
+    # ── FnGuide Summary 매칭 ──────────────────────────────────────
+
+    def match_fnguide_summaries(self, batch_size: int = 200) -> dict:
+        """tbl_sec_reports ↔ tbl_fnguide_report_summaries 매칭.
+        
+        증권사명 + 날짜 + 기업명으로 매칭하여 fnguide_summary_id를 채웁니다.
+        """
+        conn = self._get_conn()
+        stats = {"matched": 0, "errors": 0}
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    UPDATE {self.MAIN_TABLE} r
+                    SET fnguide_summary_id = s.summary_id
+                    FROM tbl_fnguide_report_summaries s
+                    WHERE r.firm_nm = s.provider
+                      AND REPLACE(s.report_date, '.', '') = r.reg_dt
+                      AND r.article_title LIKE '%%' || s.company_name || '%%'
+                      AND r.fnguide_summary_id IS NULL
+                      AND s.summary_id IN (
+                          SELECT summary_id FROM tbl_fnguide_report_summaries
+                          ORDER BY summary_id LIMIT {batch_size}
+                      )
+                """)
+                stats["matched"] = cur.rowcount
+                conn.commit()
+        except Exception as e:
+            logger.error(f"match_fnguide_summaries failed: {e}")
+            conn.rollback()
+            stats["errors"] += 1
+        finally:
+            conn.close()
+        if stats["matched"] > 0:
+            logger.info(f"[Enricher] FnGuide 매칭: {stats['matched']}건")
+        return stats
+
+    def backfill_fnguide_pdf_urls(self, batch_size: int = 200) -> dict:
+        """역매칭: tbl_sec_reports의 pdf_url → tbl_fnguide_report_summaries.
+        
+        이미 매칭된 건에 대해 sec_reports 쪽 pdf_url을 summaries 쪽에 채웁니다.
+        """
+        conn = self._get_conn()
+        stats = {"updated": 0, "errors": 0}
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    UPDATE tbl_fnguide_report_summaries s
+                    SET article_url = r.article_url
+                    FROM {self.MAIN_TABLE} r
+                    WHERE s.summary_id = r.fnguide_summary_id
+                      AND r.article_url IS NOT NULL
+                      AND r.article_url != ''
+                      AND s.article_url IS NULL
+                      AND s.summary_id IN (
+                          SELECT summary_id FROM tbl_fnguide_report_summaries
+                          WHERE article_url IS NULL
+                          ORDER BY summary_id LIMIT {batch_size}
+                      )
+                """)
+                stats["updated"] = cur.rowcount
+                conn.commit()
+        except Exception as e:
+            logger.error(f"backfill_fnguide_pdf_urls failed: {e}")
+            conn.rollback()
+            stats["errors"] += 1
+        finally:
+            conn.close()
+        if stats["updated"] > 0:
+            logger.info(f"[Enricher] FnGuide PDF URL 역매칭: {stats['updated']}건")
+        return stats

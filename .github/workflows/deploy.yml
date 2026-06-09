@@ -25,6 +25,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Clone ssh-library (path dependency)
+        run: |
+          TARGET_DIR="${{ github.workspace }}/../../../../lib/ssh_library"
+          mkdir -p "$(dirname "$TARGET_DIR")"
+          git clone --depth 1 https://x-access-token:${{ secrets.GHCR_TOKEN }}@github.com/liante0904/ssh-library.git "$TARGET_DIR"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
