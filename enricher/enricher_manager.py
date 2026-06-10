@@ -661,7 +661,7 @@ class EnricherManager(BasePostgreSQLManager):
                     FROM tbl_fnguide_report_summaries s
                     WHERE r.firm_nm = s.provider
                       AND s.author LIKE r.writer || '%%'
-                      AND REPLACE(s.report_date, '.', '')::integer - r.reg_dt::integer BETWEEN 0 AND 3
+                      AND r.reg_dt::integer - REPLACE(s.report_date, '.', '')::integer BETWEEN 0 AND 3
                       AND r.article_title LIKE '%%' || s.company_name || '%%'
                       AND r.fnguide_summary_id IS NULL
                       AND s.summary_id IN (
