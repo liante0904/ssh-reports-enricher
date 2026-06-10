@@ -6,11 +6,7 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "python-dotenv>=1.2.2",
     "loguru>=0.7.3",
-    "ssh-library",
 ]
-
-[tool.uv.sources]
-ssh-library = { path = "../../../../lib/ssh_library", editable = true }
 
 [dependency-groups]
 dev = [

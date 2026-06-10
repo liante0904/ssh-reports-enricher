@@ -15,13 +15,28 @@ PostgreSQL에 직접 연결하여:
 
 import json
 import logging
+import os
 from datetime import datetime
 from typing import Optional
 
 import psycopg2
 import psycopg2.extras
 
-from ssh_library.database import BasePostgreSQLManager
+try:
+    from ssh_library.database import BasePostgreSQLManager
+except ImportError:
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    class BasePostgreSQLManager:
+        """ssh_library 미설치 시 fallback"""
+        def __init__(self):
+            self.host = os.getenv("POSTGRES_HOST", "localhost")
+            self.port = os.getenv("POSTGRES_PORT", "5432")
+            self.database = os.getenv("POSTGRES_REPORT_DB", "ssh_reports_hub")
+            self.user = os.getenv("POSTGRES_ENRICH_USER", os.getenv("POSTGRES_USER", "ssh_reports_hub"))
+            self.password = os.getenv("POSTGRES_PASSWORD", "")
+
 from enricher.tag_extractor import TagExtractionManager
 from enricher.premium_parser import PremiumReportParser
 
