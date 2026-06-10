@@ -41,12 +41,22 @@ def main():
             if total > 0:
                 logger.info(f"[Enricher] 배치 수행 완료: 총 {total}건 중 {enriched}건 태깅 성공 (오류: {errors}건)")
             else:
-                # 미처리 건이 없을 때는 디버그 로그만 남겨 조용히 대기
                 logger.debug("[Enricher] 미처리 레포트가 존재하지 않습니다.")
                 
         except Exception as e:
             logger.error(f"[Enricher] 스케줄러 루프 중 예외 발생: {e}")
-            
+        
+        # FnGuide 매칭: 5분마다 (interval 30초 × 10회)
+        if not hasattr(main, '_fnguide_counter'):
+            main._fnguide_counter = 0
+        main._fnguide_counter += 1
+        if main._fnguide_counter % 10 == 0:
+            try:
+                enricher.match_fnguide_summaries(batch_size=200)
+                enricher.backfill_fnguide_pdf_urls(batch_size=500)
+            except Exception as e:
+                logger.error(f"[Enricher] FnGuide 매칭 중 예외: {e}")
+        
         time.sleep(interval)
 
 if __name__ == "__main__":
