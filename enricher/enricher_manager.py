@@ -677,7 +677,7 @@ class EnricherManager(BasePostgreSQLManager):
             stats["errors"] += 1
         finally:
             conn.close()
-        if stats["matched"] > 0:
+        if stats["matched"] >= 0:
             logger.info(f"[Enricher] FnGuide 매칭: {stats['matched']}건")
         return stats
 
@@ -711,6 +711,6 @@ class EnricherManager(BasePostgreSQLManager):
             stats["errors"] += 1
         finally:
             conn.close()
-        if stats["updated"] > 0:
+        if stats["updated"] >= 0:
             logger.info(f"[Enricher] PDF URL 역매칭: {stats['updated']}건")
         return stats
