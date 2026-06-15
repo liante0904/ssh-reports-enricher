@@ -9,11 +9,10 @@ RUN groupadd --gid 1001 appgroup && useradd --uid 1001 --gid 1001 --shell /bin/b
 
 WORKDIR /app
 
-# ssh_library를 git에서 clone (경로 의존성 대신)
-ARG SSH_LIBRARY_REPO=https://github.com/liante0904/ssh-library.git
-ARG SSH_LIBRARY_REF=main
-RUN git clone --depth 1 --branch ${SSH_LIBRARY_REF} ${SSH_LIBRARY_REPO} /tmp/ssh_library \
-    && cd /tmp/ssh_library && uv pip install --system -e .
+# ssh_library는 private repo이므로 CI 빌드에서 clone 불가.
+# enricher_manager.py에 자체 fallback(BasePostgreSQLManager)이 구현되어 있어
+# ssh_library가 없어도 정상 동작합니다.
+# (로컬 개발 시에는 uv sync로 설치, 프로덕션은 fallback 사용)
 
 COPY --chown=appuser:appgroup pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-cache
