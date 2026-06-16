@@ -623,34 +623,30 @@ class EnricherManager(BasePostgreSQLManager):
 
     # ── FnGuide Summary 매칭 ──────────────────────────────────────
 
-    def match_fnguide_summaries(self, batch_size: int = 200) -> dict:
+    def match_fnguide_summaries(self) -> dict:
         """tbl_sec_reports ↔ tbl_fnguide_report_summaries 매칭.
 
-        증권사명 + 날짜 + 기업명으로 매칭하여 fnguide_summary_id를 채웁니다.
+        모든 fnguide_summaries(10K+)를 대상으로 증권사명 + 날짜(±3일) + 기업명 패턴으로 매칭.
+        최근 30일 sec_reports만 처리하여 인덱스 효율 확보.
 
-        - lock_timeout=3s 적용 → 락 획득 실패시 즉시 포기
-        - statement_timeout=30s → 장시간 쿼리 블록 방지
-        - fnguide_summary_id IS NULL 조건에 부분 인덱스 활용
+        수정: summary_id LIMIT 200 제거 → 전체 summaries 대상 (기존 99% 누락 버그 해결)
         """
         conn = self._get_conn(statement_timeout="30s")
         stats = {"matched": 0, "errors": 0}
         try:
             with conn.cursor() as cur:
-                # lock_timeout 즉시 적용 (매칭 UPDATE는 락 경합 가능성 높음)
                 cur.execute("SET lock_timeout = '3s'")
+                # 모든 summaries를 대상으로 매칭 (provider, date, company_name 필터)
                 cur.execute(f"""
                     UPDATE {self.MAIN_TABLE} r
                     SET fnguide_summary_id = s.summary_id
                     FROM tbl_fnguide_report_summaries s
                     WHERE r.firm_nm = s.provider
                       AND r.fnguide_summary_id IS NULL
-                      AND s.author LIKE r.writer || '%%'
-                      AND r.reg_dt::integer - REPLACE(s.report_date, '.', '')::integer BETWEEN 0 AND 3
+                      AND r.reg_dt >= TO_CHAR(CURRENT_DATE - 30, 'YYYYMMDD')
+                      AND r.reg_dt::integer - REPLACE(s.report_date, '.', '')::integer BETWEEN -1 AND 3
                       AND r.article_title LIKE '%%' || s.company_name || '%%'
-                      AND s.summary_id IN (
-                          SELECT summary_id FROM tbl_fnguide_report_summaries
-                          ORDER BY summary_id LIMIT {batch_size}
-                      )
+                      AND s.author LIKE r.writer || '%%'
                 """)
                 stats["matched"] = cur.rowcount
                 conn.commit()

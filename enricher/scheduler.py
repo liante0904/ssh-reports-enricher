@@ -88,7 +88,7 @@ def main():
         # 단, idle backoff 시에는 현재 대기 시간에 맞춰 조정
         if tick % fnguide_interval_ticks == 0:
             try:
-                fnguide_result = enricher.match_fnguide_summaries(batch_size=200)
+                fnguide_result = enricher.match_fnguide_summaries()  # 모든 summaries 대상 (10K+)
                 pdf_result = enricher.backfill_fnguide_pdf_urls(batch_size=500)
             except Exception as e:
                 logger.error(f"[Enricher] FnGuide 매칭 중 예외: {e}")
