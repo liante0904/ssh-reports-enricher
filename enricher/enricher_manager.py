@@ -623,30 +623,32 @@ class EnricherManager(BasePostgreSQLManager):
 
     # ── FnGuide Summary 매칭 ──────────────────────────────────────
 
-    def match_fnguide_summaries(self) -> dict:
-        """tbl_sec_reports ↔ tbl_fnguide_report_summaries 매칭.
+    def match_fnguide_summaries(self, date_offset_days: int = 0) -> dict:
+        """tbl_sec_reports ↔ tbl_fnguide_report_summaries 매칭 (1일 단위).
 
-        모든 fnguide_summaries(10K+)를 대상으로 증권사명 + 날짜(±3일) + 기업명 패턴으로 매칭.
-        최근 30일 sec_reports만 처리하여 인덱스 효율 확보.
+        특정 일자(date_offset_days=0이면 오늘)의 sec_reports에 대해
+        증권사명 + 날짜(±3일) + 기업명 패턴으로 fnguide_summary_id를 채웁니다.
+        호출당 1일만 처리 → 짧고 빠르게 (테이블락 방지).
 
-        수정: summary_id LIMIT 200 제거 → 전체 summaries 대상 (기존 99% 누락 버그 해결)
+        Args:
+            date_offset_days: 0=오늘, 1=어제, ..., 최대 180 (6개월치 백필)
         """
-        conn = self._get_conn(statement_timeout="30s")
-        stats = {"matched": 0, "errors": 0}
+        conn = self._get_conn(statement_timeout="10s")
+        stats = {"matched": 0, "errors": 0, "date": None}
         try:
             with conn.cursor() as cur:
                 cur.execute("SET lock_timeout = '3s'")
-                # 모든 summaries를 대상으로 매칭 (provider, date, company_name 필터)
+                # 1일 단위 처리: reg_dt = 특정 일자
                 cur.execute(f"""
                     UPDATE {self.MAIN_TABLE} r
                     SET fnguide_summary_id = s.summary_id
                     FROM tbl_fnguide_report_summaries s
                     WHERE r.firm_nm = s.provider
                       AND r.fnguide_summary_id IS NULL
-                      AND r.reg_dt >= TO_CHAR(CURRENT_DATE - 30, 'YYYYMMDD')
+                      AND r.reg_dt = TO_CHAR(CURRENT_DATE - {date_offset_days}, 'YYYYMMDD')
                       AND r.reg_dt::integer - REPLACE(s.report_date, '.', '')::integer BETWEEN -1 AND 3
                       AND r.article_title LIKE '%%' || s.company_name || '%%'
-                      AND s.author LIKE r.writer || '%%'
+                      AND s.author LIKE REPLACE(r.writer, ', ', '.') || '%%'
                 """)
                 stats["matched"] = cur.rowcount
                 conn.commit()
@@ -663,7 +665,7 @@ class EnricherManager(BasePostgreSQLManager):
             except Exception:
                 pass
         if stats["matched"] >= 0:
-            logger.info(f"[Enricher] FnGuide 매칭: {stats['matched']}건")
+            logger.info(f"[Enricher] FnGuide 매칭 (D-{date_offset_days}): {stats['matched']}건")
         return stats
 
     

@@ -85,10 +85,19 @@ def main():
             logger.error(f"[Enricher] 스케줄러 루프 중 예외 발생: {e}")
 
         # FnGuide 매칭: 5분마다 (interval 30초 × 10회)
-        # 단, idle backoff 시에는 현재 대기 시간에 맞춰 조정
+        # - 오늘 날짜는 매번 처리
+        # - 백필: 1일씩 과거로 순환 (1~180일 전)
+        # - idle backoff 시에는 백필만 스킵 (오늘 날짜는 항상 처리)
         if tick % fnguide_interval_ticks == 0:
             try:
-                fnguide_result = enricher.match_fnguide_summaries()  # 모든 summaries 대상 (10K+)
+                # 오늘 날짜 매칭 (항상)
+                today_result = enricher.match_fnguide_summaries(date_offset_days=0)
+                # 백필: 순환 (1일씩 과거로)
+                if not hasattr(main, '_backfill_offset'):
+                    main._backfill_offset = 1
+                backfill_result = enricher.match_fnguide_summaries(date_offset_days=main._backfill_offset)
+                main._backfill_offset = (main._backfill_offset % 180) + 1  # 1~180 순환
+
                 pdf_result = enricher.backfill_fnguide_pdf_urls(batch_size=500)
             except Exception as e:
                 logger.error(f"[Enricher] FnGuide 매칭 중 예외: {e}")
