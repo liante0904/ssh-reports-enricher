@@ -647,9 +647,10 @@ class EnricherManager(BasePostgreSQLManager):
                     WHERE r.firm_nm = s.provider
                       AND r.fnguide_summary_id IS NULL
                       AND r.reg_dt = TO_CHAR(CURRENT_DATE - {date_offset_days}, 'YYYYMMDD')
-                      AND r.reg_dt::integer - REPLACE(s.report_date, '.', '')::integer BETWEEN -1 AND 3
+                      AND r.reg_dt::integer - REPLACE(s.report_date, '.', '')::integer BETWEEN -3 AND 5
                       AND r.article_title LIKE '%%' || s.company_name || '%%'
-                      AND s.author LIKE REPLACE(r.writer, ', ', '.') || '%%'
+                      AND (s.author LIKE REPLACE(r.writer, ', ', '.') || '%%'
+                           OR r.writer IS NULL OR r.writer = '')
                 """)
                 stats["matched"] = cur.rowcount
                 conn.commit()
