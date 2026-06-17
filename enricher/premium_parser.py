@@ -42,8 +42,14 @@ for _k, _v in KNOWN_STOCKS.items():
 
 # 목표주가 및 상향/하향 액션 포착 정규식
 # 예: "목표가 110,000원으로 상향", "목표주가 90000원 하향", "목표가 12만원 유지"
-TARGET_PRICE_PATTERN = re.compile(
-    r"목표(?:주)?가\s*(?P<price>\d{1,3}(?:,\d{3})*|\d{1,2}\s*만)\s*원?\s*(?:으로\s*)?\s*(?P<action>상향|하향|유지|신규|제시)"
+# 유연한 패턴: 액션 없이 가격만 있어도 추출
+_TARGET_PRICE_CORE = r"(?:목표(?:주)?가|목표가격|적정(?:주)?가)\s*[:：]?\s*(?P<price>\d{1,2}\s*만|\d{1,3}(?:,\d{3})*|\d{4,6})\s*원?\s*(?:으로\s*)?\s*(?P<action>상향|하향|유지|신규|제시|상향조정|하향조정)?"
+TARGET_PRICE_PATTERN = re.compile(_TARGET_PRICE_CORE)
+
+# 목표가 "X원" → YYYY원: "목표가" 없이 숫자+원+상향/하향 패턴
+# 예: "120,000원으로 상향", "9만원 하향"
+FLEX_PRICE_PATTERN = re.compile(
+    r"(?P<price>\d{1,2}\s*만|\d{1,3}(?:,\d{3})*|\d{4,6})\s*원\s*(?:으로\s*)?\s*(?P<action>상향|하향|유지|신규|제시|상향조정|하향조정)"
 )
 
 # 투자의견 포착 정규식 (BUY, HOLD, SELL, 매수, 중립, 매도 등)
@@ -128,34 +134,37 @@ class PremiumReportParser:
             "rating": "BUY"  # 기본값 BUY 세팅 (증권사 레포트의 90% 이상이 BUY 성향임)
         }
 
-        # 1. 목표주가 및 변동 유형 파싱
-        match = TARGET_PRICE_PATTERN.search(title)
-        if match:
-            raw_price = match.group("price").replace(",", "").strip()
-            
-            # 한글 "만" 단위 처리 가드 (예: "12만" -> 120000)
-            if "만" in raw_price:
+        # 가격 추출 헬퍼
+        def _extract_price(price_str):
+            raw = price_str.replace(",", "").replace(" ", "").strip()
+            if "만" in raw:
                 try:
-                    price_num = float(raw_price.replace("만", "").strip())
-                    result["target_price"] = int(price_num * 10000)
-                except ValueError:
-                    pass
-            else:
-                try:
-                    result["target_price"] = int(raw_price)
-                except ValueError:
-                    pass
+                    return int(float(raw.replace("만", "").strip()) * 10000)
+                except ValueError: return None
+            try:
+                return int(raw)
+            except ValueError:
+                return None
 
-            # 변동 액션 판정
-            action = match.group("action")
-            if "상향" in action:
-                result["revision_type"] = "UPGRADE"
-            elif "하향" in action:
-                result["revision_type"] = "DOWNGRADE"
-            elif "신규" in action or "제시" in action:
-                result["revision_type"] = "NEW"
-            else:
-                result["revision_type"] = "MAINTAIN"
+        # 1. 목표주가 및 변동 유형 파싱 (TARGET_PRICE_PATTERN, fallback: FLEX_PRICE_PATTERN)
+        match = TARGET_PRICE_PATTERN.search(title)
+        if not match:
+            match = FLEX_PRICE_PATTERN.search(title)
+        if match:
+            raw_price = match.group("price")
+            tp = _extract_price(raw_price)
+            if tp and tp >= 1000:  # 최소 1000원 이상만 유효
+                result["target_price"] = tp
+
+            # 변동 액션 판정 (action 그룹은 optional)
+            if match.group("action"):
+                action = match.group("action")
+                if "상향" in action:
+                    result["revision_type"] = "UPGRADE"
+                elif "하향" in action:
+                    result["revision_type"] = "DOWNGRADE"
+                elif "신규" in action or "제시" in action:
+                    result["revision_type"] = "NEW"
 
         # 2. 투자의견 (Rating) 파싱
         rating_match = OPINION_PATTERN.search(title)
