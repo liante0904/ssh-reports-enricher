@@ -638,6 +638,7 @@ class EnricherManager(BasePostgreSQLManager):
         try:
             with conn.cursor() as cur:
                 cur.execute("SET lock_timeout = '3s'")
+                cur.execute("SET TIME ZONE 'Asia/Seoul'")  # PostgreSQL 서버 UTC → KST
                 # 1일 단위 처리: reg_dt = 특정 일자
                 cur.execute(f"""
                     UPDATE {self.MAIN_TABLE} r
