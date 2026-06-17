@@ -62,6 +62,7 @@ def run(db_batch=500, max_batches=0):
               AND article_title IS NOT NULL AND article_title != ''
               AND reg_dt >= '20260101'
               AND (fnguide_summary_id IS NOT NULL OR report_type IS NOT NULL)
+              AND (sector IS NULL OR sector = '')
             ORDER BY fnguide_summary_id DESC NULLS LAST, report_id DESC
             LIMIT %s
         """, (db_batch,))
@@ -75,14 +76,17 @@ def run(db_batch=500, max_batches=0):
             for rid, _ in chunk:
                 r = results.get(rid)
                 if not r: continue
+                tags = r.get("tags") or []
+                if not isinstance(tags, list): tags = [str(tags)]
                 cur.execute("""
                     UPDATE tbl_sec_reports SET tags=%s, sector=%s, stock_names=%s, report_type=%s
                     WHERE report_id=%s
-                """, (json.dumps(r.get("tags", []), ensure_ascii=False),
-                      r.get("sector", "") or "",
-                      json.dumps(r.get("stock_names", []), ensure_ascii=False),
-                      r.get("report_type", "") or "", rid))
+                """, (json.dumps(tags, ensure_ascii=False),
+                      r.get("sector") or "",
+                      json.dumps(r.get("stock_names") or [], ensure_ascii=False),
+                      r.get("report_type") or "", rid))
                 enriched += 1
+            # sector가 채워졌으면 다음 배치에서 제외됨
             time.sleep(0.3)
 
         conn.commit()
