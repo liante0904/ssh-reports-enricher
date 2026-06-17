@@ -27,37 +27,50 @@ DB_CONFIG = {
 API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("ANTIGRAVITY_API_KEY") or os.getenv("DEEPSEEK_API_KEY", "")
 MODEL = "gemini-2.0-flash"
 
-PROMPT = """Extract from this Korean financial report title. Return ONLY valid JSON, no markdown.
+BATCH_PROMPT = """Extract tags from these Korean financial report titles.
+Return ONLY a JSON object with format: {"results": [{"id": N, "tags": [...], "sector": "...", "stock_names": [...], "report_type": "COMPANY|INDUSTRY|MACRO|STRATEGY|QUANT"}, ...]}
+No markdown, no explanation.
 
-{
-  "tags": ["keyword1", "keyword2"],
-  "sector": "industry sector in Korean",
-  "stock_names": ["stock name in Korean"],
-  "report_type": "COMPANY|INDUSTRY|MACRO|STRATEGY|QUANT"
-}
+Titles:
+{titles}"""
 
-Title: {title}"""
+BATCH_SIZE = 50  # 한 번에 처리할 제목 수
 
 
-def extract_tags(title):
-    """Gemini API 호출 → 태그 추출"""
-    if not API_KEY:
-        return None
+def extract_tags_batch(rows):
+    """Gemini API 배치 호출 → 여러 제목 동시 태그 추출"""
+    if not API_KEY or not rows:
+        return {}
     try:
         genai.configure(api_key=API_KEY)
         model = genai.GenerativeModel(MODEL)
-        resp = model.generate_content(PROMPT.format(title=title))
+
+        titles_block = "\n".join(f"{rid}: {title}" for rid, title in rows)
+        resp = model.generate_content(BATCH_PROMPT.format(titles=titles_block))
         text = resp.text.strip()
-        # JSON 파싱
         if text.startswith("```"):
             text = re.sub(r"```\w*\n?", "", text).rstrip("```")
-        return json.loads(text)
+
+        data = json.loads(text)
+        results = data.get("results", [])
+        out = {}
+        for r in results:
+            rid = r.get("id")
+            if rid:
+                out[rid] = {
+                    "tags": r.get("tags", []),
+                    "sector": r.get("sector", "") or "",
+                    "stock_names": r.get("stock_names", []),
+                    "report_type": r.get("report_type", "") or "",
+                }
+        return out
     except Exception as e:
-        print(f"  Gemini error: {e}", file=sys.stderr)
-        return None
+        print(f"  Gemini batch error: {e}", file=sys.stderr)
+        return {}
 
 
-def run(batch_size=50, max_batches=0):
+def run(db_batch=500, max_batches=0):
+    """DB에서 batch_size만큼 가져와서 LLM 배치로 처리"""
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
 
@@ -65,7 +78,7 @@ def run(batch_size=50, max_batches=0):
     total = 0
     enriched = 0
 
-    print(f"[gemini-tag] batch={batch_size} max_batches={'∞' if max_batches==0 else max_batches}")
+    print(f"[gemini-tag] db_batch={db_batch} llm_batch={BATCH_SIZE} max={'∞' if max_batches==0 else max_batches}")
 
     while True:
         batch_num += 1
@@ -76,36 +89,42 @@ def run(batch_size=50, max_batches=0):
               AND article_title IS NOT NULL AND article_title != ''
             ORDER BY report_id DESC
             LIMIT %s
-        """, (batch_size,))
+        """, (db_batch,))
         rows = cur.fetchall()
         if not rows:
             print(f"[gemini-tag] no pending reports. done.")
             break
 
-        for rid, title in rows:
-            total += 1
-            result = extract_tags(title)
-            if not result:
-                continue
+        total += len(rows)
 
-            tags_json = json.dumps(result.get("tags", []), ensure_ascii=False)
-            sector = result.get("sector", "") or ""
-            stock_names = json.dumps(result.get("stock_names", []), ensure_ascii=False)
-            report_type = result.get("report_type", "") or ""
+        # BATCH_SIZE씩 나눠서 LLM 호출
+        for i in range(0, len(rows), BATCH_SIZE):
+            chunk = rows[i:i + BATCH_SIZE]
+            results = extract_tags_batch(chunk)
 
-            cur.execute("""
-                UPDATE tbl_sec_reports
-                SET tags = %s, sector = %s, stock_names = %s, report_type = %s
-                WHERE report_id = %s
-            """, (tags_json, sector, stock_names, report_type, rid))
-            enriched += 1
+            for rid, _ in chunk:
+                r = results.get(rid)
+                if not r:
+                    continue
+                cur.execute("""
+                    UPDATE tbl_sec_reports
+                    SET tags = %s, sector = %s, stock_names = %s, report_type = %s
+                    WHERE report_id = %s
+                """, (
+                    json.dumps(r["tags"], ensure_ascii=False),
+                    r["sector"],
+                    json.dumps(r["stock_names"], ensure_ascii=False),
+                    r["report_type"],
+                    rid
+                ))
+                enriched += 1
+            time.sleep(0.3)
 
         conn.commit()
-        print(f"[gemini-tag] batch #{batch_num}: {enriched}/{total} enriched")
+        print(f"[gemini-tag] batch #{batch_num}: {enriched}/{total} enriched ({(enriched/total*100):.1f}%)")
 
         if max_batches > 0 and batch_num >= max_batches:
             break
-        time.sleep(0.5)  # rate limit
 
     cur.close()
     conn.close()
