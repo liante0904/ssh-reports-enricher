@@ -22,7 +22,9 @@ EXTRACTORS = {
 }
 
 def _parse_ds(html):
-    m = re.search(r'id="bo_v_con"[^>]*>(.*?)</div>\s*</section', html, re.DOTALL)
+    m = re.search(r'id="bo_v_con">(.*?)</div>\s*(?:</section|<script|<div class="bo_v_)', html, re.DOTALL)
+    if not m: m = re.search(r'id="bo_v_con">(.*?)(?:</section)', html, re.DOTALL)
+    if not m: m = re.search(r'id="bo_v_con">(.*?)</div>', html, re.DOTALL)
     if not m: return None
     clean = re.sub(r'<[^>]+>', ' ', m.group(1))
     clean = re.sub(r'&nbsp;', ' ', clean)
