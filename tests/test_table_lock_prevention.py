@@ -214,7 +214,7 @@ def enrichment_db() -> sqlite3.Connection:
             article_title TEXT,
             key TEXT UNIQUE,
             writer TEXT DEFAULT '',
-            reg_dt TEXT DEFAULT '',
+            report_date TEXT DEFAULT '',
             telegram_url TEXT DEFAULT '',
             fnguide_summary_id INTEGER,
             tags TEXT DEFAULT NULL,

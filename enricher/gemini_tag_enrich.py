@@ -60,7 +60,7 @@ def run(db_batch=500, max_batches=0):
             SELECT report_id, article_title FROM tbl_sec_reports
             WHERE (tags IS NULL OR tags = '[]')
               AND article_title IS NOT NULL AND article_title != ''
-              AND reg_dt >= '20260101'
+              AND report_date >= '20260101'
               AND (fnguide_summary_id IS NOT NULL OR report_type IS NOT NULL)
               AND (sector IS NULL OR sector = '')
             ORDER BY fnguide_summary_id DESC NULLS LAST, report_id DESC

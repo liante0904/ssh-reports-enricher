@@ -639,15 +639,15 @@ class EnricherManager(BasePostgreSQLManager):
             with conn.cursor() as cur:
                 cur.execute("SET lock_timeout = '3s'")
                 cur.execute("SET TIME ZONE 'Asia/Seoul'")  # PostgreSQL 서버 UTC → KST
-                # 1일 단위 처리: reg_dt = 특정 일자
+                # 1일 단위 처리: report_date = 특정 일자
                 cur.execute(f"""
                     UPDATE {self.MAIN_TABLE} r
                     SET fnguide_summary_id = s.summary_id
                     FROM tbl_fnguide_report_summaries s
                     WHERE r.firm_nm = s.provider
                       AND r.fnguide_summary_id IS NULL
-                      AND r.reg_dt = TO_CHAR(CURRENT_DATE - {date_offset_days}, 'YYYYMMDD')
-                      AND r.reg_dt::integer - REPLACE(s.report_date, '.', '')::integer BETWEEN -3 AND 5
+                      AND r.report_date = TO_CHAR(CURRENT_DATE - {date_offset_days}, 'YYYYMMDD')
+                      AND r.report_date::integer - REPLACE(s.report_date, '.', '')::integer BETWEEN -3 AND 5
                       AND r.article_title LIKE '%%' || s.company_name || '%%'
                       AND (s.author LIKE REPLACE(r.writer, ', ', '.') || '%%'
                            OR r.writer IS NULL OR r.writer = '')

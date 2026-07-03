@@ -61,7 +61,7 @@ def run(batch=100):
             SELECT report_id, article_url FROM tbl_sec_reports
             WHERE firm_nm = %s AND article_url LIKE %s
               AND (article_text IS NULL OR article_text = '')
-            ORDER BY save_time DESC LIMIT %s
+            ORDER BY save_at DESC LIMIT %s
         """, (firm, cfg["url_like"], batch))
         rows = cur.fetchall()
         if not rows: continue
@@ -90,7 +90,7 @@ def run_one(firm: str, batch=100):
     cur = conn.cursor()
     for f in firms:
         cfg = EXTRACTORS[f]
-        cur.execute("SELECT report_id, article_url FROM tbl_sec_reports WHERE firm_nm=%s AND article_url LIKE %s AND (article_text IS NULL OR article_text='') ORDER BY save_time DESC LIMIT %s", (f, cfg["url_like"], batch))
+        cur.execute("SELECT report_id, article_url FROM tbl_sec_reports WHERE firm_nm=%s AND article_url LIKE %s AND (article_text IS NULL OR article_text='') ORDER BY save_at DESC LIMIT %s", (f, cfg["url_like"], batch))
         rows = cur.fetchall()
         updated = 0
         for rid, url in rows:

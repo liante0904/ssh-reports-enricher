@@ -119,13 +119,13 @@ def mock_db() -> Generator[sqlite3.Connection, None, None]:
             firm_nm TEXT,
             article_title TEXT,
             writer TEXT,
-            reg_dt TEXT
+            report_date TEXT
         )
     """)
     
     # 기존 레포트 데이터 인서트 시뮬레이션
     cur.execute("""
-        INSERT INTO tbl_sec_reports (firm_nm, article_title, writer, reg_dt)
+        INSERT INTO tbl_sec_reports (firm_nm, article_title, writer, report_date)
         VALUES ('하나증권', '팸텍 (271830.KQ): IPO 주관사 업데이트: 반도체 주도 성장', '홍길동 연구원, 김철수 선임', '2026-06-07')
     """)
     conn.commit()
