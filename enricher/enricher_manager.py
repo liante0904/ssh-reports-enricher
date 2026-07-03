@@ -646,8 +646,8 @@ class EnricherManager(BasePostgreSQLManager):
                     FROM tbl_fnguide_report_summaries s
                     WHERE r.firm_nm = s.provider
                       AND r.fnguide_summary_id IS NULL
-                      AND r.report_date = TO_CHAR(CURRENT_DATE - {date_offset_days}, 'YYYYMMDD')
-                      AND r.report_date::integer - REPLACE(s.report_date, '.', '')::integer BETWEEN -3 AND 5
+                      AND TO_CHAR(r.report_date, 'YYYYMMDD') = TO_CHAR(CURRENT_DATE - {date_offset_days}, 'YYYYMMDD')
+                      AND TO_CHAR(r.report_date, 'YYYYMMDD')::integer - REPLACE(s.report_date, '.', '')::integer BETWEEN -3 AND 5
                       AND r.article_title LIKE '%%' || s.company_name || '%%'
                       AND (s.author LIKE REPLACE(r.writer, ', ', '.') || '%%'
                            OR r.writer IS NULL OR r.writer = '')
