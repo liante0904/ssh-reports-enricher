@@ -44,6 +44,11 @@ def test_extract_tickers():
     title_d = "SK하이닉스 실적 최고치 경신 전망"
     assert parser.extract_tickers(title_d) == ["000660"]
 
+    # 케이스 E: 증권사 Yahoo-style suffix 및 의견 표기가 있어도 KRX 코드 추출
+    title_e = "에이블씨엔씨(078520.KS/NR): 글로벌 모멘텀 본격화"
+    assert parser.extract_tickers(title_e) == ["078520"]
+    assert parser.classify_report_type(title_e, parser.extract_tickers(title_e)) == "COMPANY"
+
 
 def test_parse_target_price_and_rating():
     """목표주가 정수 변환, 변동 방향(Action) 및 투자의견(Rating) 추출 검증"""
@@ -65,6 +70,11 @@ def test_parse_target_price_and_rating():
     res_c = parser.parse_target_price_and_rating("기아 (000270): 목표가 150,000원 유지")
     assert res_c["target_price"] == 150000
     assert res_c["revision_type"] == "MAINTAIN"
+
+    # 근거가 없는 제목은 매수/유지 기본값을 만들지 않는다.
+    res_d = parser.parse_target_price_and_rating("에이블씨엔씨(078520.KS/NR): 글로벌 모멘텀 본격화")
+    assert res_d["rating"] is None
+    assert res_d["revision_type"] is None
 
 
 def test_parse_analysts():
@@ -233,7 +243,7 @@ def test_premium_pipeline_database_integration(mock_db):
     cur.execute("SELECT target_price, rating, report_type, stock_tickers FROM tbl_sec_reports WHERE report_id = ?", (report_id,))
     tp, rat, rt, tk_str = cur.fetchone()
     assert tp is None # 본 제목("팸텍 IPO 주관사...")에는 목표주가 숫자가 없으므로 None이 맞음
-    assert rat == "BUY" # 기본 의견 BUY 표준화 성공
+    assert rat is None # 명시적 투자의견이 없으면 추정하지 않음
     assert rt == "COMPANY" # '팸텍' Ticker 매핑 성공으로 회사 레포트 판정 통과
     assert json.loads(tk_str) == ["271830"] # 표준 Ticker "271830" 결합 성공
     
@@ -284,5 +294,4 @@ def test_tag_extractor_new_rules_and_smart_dedup():
         assert "반도체 신기술" in res_dedup["tags"]
 
     asyncio.run(run_test())
-
 

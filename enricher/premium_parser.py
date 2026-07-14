@@ -55,8 +55,9 @@ FLEX_PRICE_PATTERN = re.compile(
 # 투자의견 포착 정규식 (BUY, HOLD, SELL, 매수, 중립, 매도 등)
 OPINION_PATTERN = re.compile(r"(BUY|HOLD|SELL|OUTPERFORM|NEUTRAL|UNDERPERFORM|매수|중립|매도|시장상회)", re.IGNORECASE)
 
-# 6자리 표준 종목코드 정규식 (예: "(005930)")
-TICKER_PATTERN = re.compile(r"\((\d{6})\)")
+# 6자리 KRX 종목코드 정규식 (예: "(005930)", "(078520.KS/NR)")
+# 증권사 제목은 Yahoo-style 시장 suffix와 의견을 코드 뒤에 붙이기도 한다.
+TICKER_PATTERN = re.compile(r"\((\d{6})(?:\.(?:KS|KQ))?(?:/[^)]*)?\)")
 
 # 산업 핵심 섹터 분류 키워드 (report_type 판정용)
 SECTOR_KEYWORDS = [
@@ -124,14 +125,15 @@ class PremiumReportParser:
         Returns:
             {
                 "target_price": int or None,
-                "revision_type": "UPGRADE" | "DOWNGRADE" | "MAINTAIN" | "NEW",
-                "rating": "BUY" | "HOLD" | "SELL" | "NEUTRAL"
+                "revision_type": "UPGRADE" | "DOWNGRADE" | "MAINTAIN" | "NEW" | None,
+                "rating": "BUY" | "HOLD" | "SELL" | "NEUTRAL" | None
             }
         """
         result = {
             "target_price": None,
-            "revision_type": "MAINTAIN",
-            "rating": "BUY"  # 기본값 BUY 세팅 (증권사 레포트의 90% 이상이 BUY 성향임)
+            # 근거 없는 기본 BUY/MAINTAIN은 산업 보고서와 NR 보고서를 오염시킨다.
+            "revision_type": None,
+            "rating": None,
         }
 
         # 가격 추출 헬퍼
@@ -165,6 +167,8 @@ class PremiumReportParser:
                     result["revision_type"] = "DOWNGRADE"
                 elif "신규" in action or "제시" in action:
                     result["revision_type"] = "NEW"
+                elif "유지" in action:
+                    result["revision_type"] = "MAINTAIN"
 
         # 2. 투자의견 (Rating) 파싱
         rating_match = OPINION_PATTERN.search(title)
