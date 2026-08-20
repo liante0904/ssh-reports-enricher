@@ -21,7 +21,7 @@ def _date_bounds(enricher: EnricherManager) -> tuple[int, int]:
                 "FROM tbl_sec_reports WHERE report_date IS NOT NULL"
             )
             max_offset = int(cur.fetchone()[0] or 0)
-        return 0, max_offset
+        return max_offset, 0
     finally:
         conn.close()
 
