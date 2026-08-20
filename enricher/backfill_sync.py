@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-고속 동기식 Backfill — tags/sector/stock_names 일괄 채우기
+고속 동기식 Backfill — 전체 미처리 레포트의 tags/sector/stock_names 일괄 채우기
 
 배치마다 독립적인 짧은 커넥션을 사용하여 트랜잭션 락 누적을 방지합니다.
 statement_timeout=30s 적용으로 쿼리 블록 시 빠르게 실패합니다.

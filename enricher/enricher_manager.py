@@ -632,7 +632,7 @@ class EnricherManager(BasePostgreSQLManager):
         호출당 1일만 처리 → 짧고 빠르게 (테이블락 방지).
 
         Args:
-            date_offset_days: 0=오늘, 1=어제, ..., 최대 180 (6개월치 백필)
+            date_offset_days: 0=오늘, 1=어제, ... (스케줄러 기본 백필 범위는 최근 14일)
         """
         conn = self._get_conn(statement_timeout="10s")
         stats = {"matched": 0, "errors": 0, "date": None}

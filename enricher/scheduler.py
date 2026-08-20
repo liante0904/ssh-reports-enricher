@@ -5,6 +5,7 @@ Enricher Scheduler - 주기적으로 미처리 레포트를 탐색하여 태그 
 테이블락 방지 설계:
 - enrich_pending: 기본 30분 간격, 미처리 건 없으면 점진적으로 대기 시간 증가
 - FnGuide 매칭: 5분 간격, lock_timeout=3s 즉시 적용
+- 과거 매핑 순환 범위는 기본 14일(ENRICHER_FNGUIDE_BACKFILL_DAYS)로 제한
 - 모든 쿼리에 statement_timeout + lock_timeout 적용 (enricher_manager.py)
 """
 
@@ -37,6 +38,7 @@ def main():
     interval = int(os.getenv("ENRICHER_INTERVAL_SECONDS", "1800"))
     limit = int(os.getenv("ENRICHER_BATCH_LIMIT", "100"))
     fnguide_interval_ticks = int(os.getenv("ENRICHER_FNGUIDE_INTERVAL_TICKS", "10"))  # 10회마다 FnGuide
+    fnguide_backfill_days = max(0, int(os.getenv("ENRICHER_FNGUIDE_BACKFILL_DAYS", "14")))
 
     # idle backoff 상태
     idle_ticks = 0       # 연속 idle tick 카운트
@@ -88,7 +90,7 @@ def main():
 
         # FnGuide 매칭: 5분마다 (interval 30초 × 10회)
         # - 오늘 날짜는 매번 처리
-        # - 백필: 1일씩 과거로 순환 (1~180일 전)
+        # - 백필: 1일씩 과거로 순환 (기본 1~14일 전)
         # - idle backoff 시에는 백필만 스킵 (오늘 날짜는 항상 처리)
         if tick % fnguide_interval_ticks == 0:
             try:
@@ -98,7 +100,7 @@ def main():
                 if not hasattr(main, '_backfill_offset'):
                     main._backfill_offset = 1
                 backfill_result = enricher.match_fnguide_summaries(date_offset_days=main._backfill_offset)
-                main._backfill_offset = (main._backfill_offset % 180) + 1  # 1~180 순환
+                main._backfill_offset = (main._backfill_offset % fnguide_backfill_days) + 1 if fnguide_backfill_days else 1
 
                 pdf_result = enricher.backfill_fnguide_pdf_urls(batch_size=500)
             except Exception as e:
