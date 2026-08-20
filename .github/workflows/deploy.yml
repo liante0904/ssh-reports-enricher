@@ -128,6 +128,14 @@ jobs:
 
             # reports-enricher 재배포
             compose pull reports-enricher
+
+            # 이전 배포가 다른 Compose project로 만든 동일 이름의 컨테이너를
+            # 남긴 경우 compose up이 이름 충돌로 중단될 수 있다. 대상 서비스
+            # 컨테이너만 제거하고, 다른 컨테이너에는 손대지 않는다.
+            if docker ps -a --format '{{.Names}}' | grep -Fxq 'ssh-reports-enricher-prod'; then
+              docker rm -f ssh-reports-enricher-prod
+            fi
+
             compose up -d --no-build --force-recreate reports-enricher
 
             RUNNING_SHA="$(docker inspect ssh-reports-enricher-prod --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
