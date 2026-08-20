@@ -58,7 +58,7 @@ def run(db_batch=500, max_batches=0):
         n += 1
         cur.execute("""
             SELECT report_id, article_title FROM tbl_sec_reports
-            WHERE (tags IS NULL OR tags = '[]')
+            WHERE tags IS NULL
               AND article_title IS NOT NULL AND article_title != ''
               AND report_date >= '20260101'
               AND (fnguide_summary_id IS NOT NULL OR report_type IS NOT NULL)

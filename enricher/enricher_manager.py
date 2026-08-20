@@ -22,7 +22,7 @@ PostgreSQL에 직접 연결하여:
    - 연결 옵션이 아닌 SET 명령 사용 → PgBouncer 호환
 
 2. **enrich_pending() → 부분 인덱스(idx_sec_reports_tags_null) 활용**
-   - WHERE (tags IS NULL OR tags = '[]'::jsonb) → index scan
+   - WHERE tags IS NULL → index scan
    - jsonb_array_length() 함수 제거 → 인덱스 사용 불가 함수
    - ORDER BY report_id DESC → 부분 인덱스 정렬 활용
 
@@ -358,13 +358,14 @@ class EnricherManager(BasePostgreSQLManager):
         stats = {"total": 0, "enriched": 0, "skipped": 0, "errors": 0}
 
         try:
-            # 부분 인덱스 활용: tags IS NULL OR tags = '[]'::jsonb
+            # 처리 완료된 빈 태그([])는 재처리하지 않는다.
+            # 부분 인덱스(idx_sec_reports_tags_null)의 대상인 미처리 NULL만 조회한다.
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
                     f"""
                     SELECT report_id, firm_nm, article_title
                     FROM {self.MAIN_TABLE}
-                    WHERE (tags IS NULL OR tags = '[]'::jsonb OR tags = '[]')
+                    WHERE tags IS NULL
                       AND article_title IS NOT NULL
                       AND article_title != ''
                     ORDER BY report_id DESC

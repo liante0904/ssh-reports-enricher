@@ -3,7 +3,7 @@
 Enricher Scheduler - 주기적으로 미처리 레포트를 탐색하여 태그 추출을 진행하는 데몬
 
 테이블락 방지 설계:
-- enrich_pending: 30초~300초 간격, 미처리 건 없으면 점진적으로 대기 시간 증가 (idle backoff)
+- enrich_pending: 기본 30분 간격, 미처리 건 없으면 점진적으로 대기 시간 증가
 - FnGuide 매칭: 5분 간격, lock_timeout=3s 즉시 적용
 - 모든 쿼리에 statement_timeout + lock_timeout 적용 (enricher_manager.py)
 """
@@ -25,14 +25,16 @@ if _project_root not in sys.path:
 from enricher.enricher_manager import EnricherManager
 
 # ── idle backoff 설정 ──
-IDLE_BACKOFF_MIN = int(os.getenv("ENRICHER_IDLE_BACKOFF_MIN", "30"))      # 최소 대기 (초)
-IDLE_BACKOFF_MAX = int(os.getenv("ENRICHER_IDLE_BACKOFF_MAX", "300"))     # 최대 대기 (초, 5분)
+IDLE_BACKOFF_MIN = int(os.getenv("ENRICHER_IDLE_BACKOFF_MIN", "1800"))   # 최소 대기 (초, 30분)
+IDLE_BACKOFF_MAX = int(os.getenv("ENRICHER_IDLE_BACKOFF_MAX", "3600"))   # 최대 대기 (초, 60분)
 IDLE_BACKOFF_FACTOR = float(os.getenv("ENRICHER_IDLE_BACKOFF_FACTOR", "2.0"))  # 배수 증가
 IDLE_BACKOFF_DECREASE = int(os.getenv("ENRICHER_IDLE_BACKOFF_DECREASE", "1"))   # 작업 발견 시 감소 단계
 
 
 def main():
-    interval = int(os.getenv("ENRICHER_INTERVAL_SECONDS", "30"))
+    # tbl_sec_reports INSERT 스케줄(30분 계열)에 맞춘 저빈도 안전망.
+    # 신규 INSERT 직후 처리는 scraper의 enrich_by_keys() 연결 작업으로 분리한다.
+    interval = int(os.getenv("ENRICHER_INTERVAL_SECONDS", "1800"))
     limit = int(os.getenv("ENRICHER_BATCH_LIMIT", "100"))
     fnguide_interval_ticks = int(os.getenv("ENRICHER_FNGUIDE_INTERVAL_TICKS", "10"))  # 10회마다 FnGuide
 

@@ -37,7 +37,7 @@ DB_CONFIG = {
 SELECT_SQL = """
     SELECT report_id, firm_nm, article_title
     FROM tbl_sec_reports
-    WHERE (tags IS NULL OR tags = '[]'::jsonb OR tags = '[]')
+    WHERE tags IS NULL
       AND article_title IS NOT NULL AND article_title != ''
     ORDER BY report_id
     LIMIT %s
