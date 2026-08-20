@@ -38,6 +38,8 @@ def test_gemini_batch_does_not_reprocess_empty_tag_rows():
 
 def test_scheduler_default_matches_low_frequency_insert_cadence():
     source = (ROOT / "enricher" / "scheduler.py").read_text(encoding="utf-8")
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
     assert 'ENRICHER_INTERVAL_SECONDS", "1800"' in source
     assert 'ENRICHER_IDLE_BACKOFF_MIN", "1800"' in source
+    assert "ENRICHER_INTERVAL_SECONDS=1800" in compose

@@ -15,7 +15,8 @@ services:
       - APP_ENV=${APP_ENV:-prod}
       - TZ=Asia/Seoul
       - LOG_BASE_DIR=/log
-      - ENRICHER_INTERVAL_SECONDS=${ENRICHER_INTERVAL_SECONDS:-30}
+      # 신규 INSERT 주기와 맞춘 저빈도 안전망. env_file의 구형 30초 값보다 우선한다.
+      - ENRICHER_INTERVAL_SECONDS=1800
       - ENRICHER_BATCH_LIMIT=${ENRICHER_BATCH_LIMIT:-100}
     stdin_open: true
     tty: true
